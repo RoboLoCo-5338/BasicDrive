@@ -17,8 +17,8 @@ private:
 	{
 		lw = LiveWindow::GetInstance();
 		drive = new RobotDrive(leftdrive1, leftdrive2, rightdrive1, rightdrive2);
-		drive.SetExpiration(20000);
-		drive.SetSafetyEnabled(false);
+		drive->SetExpiration(20000);
+		drive->SetSafetyEnabled(false);
 	}
 
 	void AutonomousInit()
@@ -33,8 +33,8 @@ private:
 
 	void TeleopInit()
 	{
-		driveTrain.SetExpiration(200000);
-		driveTrain.SetSafetyEnabled(false);
+		drive->SetExpiration(200000);
+		drive->SetSafetyEnabled(false);
 	}
 
 	void TeleopPeriodic()
@@ -42,7 +42,7 @@ private:
 		float leftPower, rightPower;
 		leftPower = leftjoystick->GetY();
 		rightPower = rightjoystick->GetY();
-		drive->RobotDrive(leftPower, rightPower, false);
+		drive->TankDrive(leftPower, rightPower, false);
 	}
 
 	void TestPeriodic()
