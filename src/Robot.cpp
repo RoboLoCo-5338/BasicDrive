@@ -17,30 +17,22 @@ private:
 	// Talon SRX 7 - Winch
 	// Talon SRX 8 - Shooter
 	LiveWindow *lw = nullptr;
-	/* Create shared pointers for scissor lift motors */
-	shared_ptr<CANTalon> scissorR = std::make_shared<CANTalon>(6);
-	shared_ptr<CANTalon> scissorL = std::make_shared<CANTalon>(5);
 
 	AHRS *ahrs; // Gyroscope
 
-	Talon *intake = new Talon(0); // Controller for intake
+	CANTalon *intake = new CANTalon(5); // Controller for intake
 
-	CANTalon *intakeLever = new CANTalon(0); // Controller for intake
-	CANTalon *leftdrive1 = new CANTalon(1); // Our controllers for our main drivetrain
-	CANTalon *leftdrive2 = new CANTalon(2); // Two motors per side
-	CANTalon *rightdrive2 = new CANTalon(3);
-	CANTalon *rightdrive1 = new CANTalon(4);
+	CANTalon *intakeLever = new CANTalon(6); // Controller for intake lever
+	CANTalon *leftdrive1 = new CANTalon(3); // Our controllers for our main drivetrain
+	CANTalon *leftdrive2 = new CANTalon(4); // Two motors per side
+	CANTalon *rightdrive2 = new CANTalon(1);
+	CANTalon *rightdrive1 = new CANTalon(2);
+	CANTalon *winch = new CANTalon(7);
+	CANTalon *shooter = new CANTalon(8);
 
 	// Create our drive train and assign the motor controllers
 	RobotDrive *drive = new RobotDrive(leftdrive2, leftdrive1, rightdrive2,
 			rightdrive1);
-
-	// Our inputs from limit switches for our scissor lift
-	shared_ptr<DigitalInput> leftup = std::make_shared<DigitalInput>(1);
-	shared_ptr<DigitalInput> rightup = std::make_shared<DigitalInput>(0);
-
-	// Create a scissorLift object and assign the motors and limit switches
-	Scissor *scissorLift = new Scissor(scissorL, scissorR, leftup, rightup);
 
 	// Create our inputs for our joysticks
 	Joystick *controlstick = new Joystick(2);
@@ -135,6 +127,7 @@ private:
 		autoLength = SmartDashboard::GetNumber(AUTO_LENGTH, AUTO_LENGTH_DEFAULT);
 		autoSpeed = SmartDashboard::GetNumber(AUTO_SPEED, AUTO_SPEED_DEFAULT);
 		autoIntakeSpeed = SmartDashboard::GetNumber(AUTO_INTAKE_SPEED, AUTO_INTAKE_SPEED_DEFAULT);
+		liftdown->Set(false);
 	}
 
 	// Our autonomous
@@ -287,12 +280,14 @@ private:
 			break;
 		case 4:
 			intake->Set(0.5);
+			shooter->Set(-0.5);
 			if (timer->Get() >= 2) {
 				currentState = 5;
 			}
 			break;
 		case 5:
 			intake->Set(0.0);
+			shooter->Set(0.0);
 			drive->TankDrive(0.0, 0.0);
 			break;
 		}
@@ -438,6 +433,7 @@ private:
 	void TeleopInit() override {
 		drive->SetExpiration(200000);
 		drive->SetSafetyEnabled(false);
+		liftdown->Set(false);
 	}
 
 	// The actual stuff
@@ -480,15 +476,14 @@ private:
 		// Depending on the button, our intake will eat or shoot the ball
 		if (controlstick->GetRawButton(1)) {
 			intake->Set(-scaleIntake);
+			shooter->Set(scaleIntake);
 		} else if (controlstick->GetRawButton(2)) {
 			intake->Set(scaleIntake);
+			shooter->Set(-scaleIntake);
 		} else {
 			intake->Set(0);
+			shooter->Set(0);
 		}
-
-		// Scissor lift controls
-		float scissorPower = controlstick->GetY(); // Power for scissor lift
-		scissorLift->Set(scissorPower);
 
 		// Control the motor that lifts and descends the intake bar
 		if (controlstick->GetRawButton(4)) {
@@ -501,6 +496,20 @@ private:
 			intakeLever->Set(scaleIntake);
 		} else {
 			intakeLever->Set(0);
+		}
+		if (controlstick->GetRawButton(11)) {
+			lift->Set(true);
+			liftdown->Set(false);
+		} else if (controlstick->GetRawButton(12)){
+			lift->Set(false);
+			liftdown->Set(true);
+		}
+		if (controlstick->GetRawButton(9)) {
+			winch->Set(scaleIntake);
+		} else if (controlstick->GetRawButton(10)) {
+			winch->Set(-scaleIntake);
+		} else {
+			winch->Set(0);
 		}
 		UpdateDashboard();
 	}
