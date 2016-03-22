@@ -9,6 +9,25 @@
 
 namespace mqserver {
 
+struct packetHeader {
+	struct {
+		uint8_t type;
+		uint16_t namelen;
+	} readHeader;
+	uint8_t dataType;
+	uint16_t datalen;
+};
+
+struct getResponseHeader {
+	uint8_t status;
+	uint8_t dataType;
+	uint16_t datalen;
+};
+
+struct setResponseHeader {
+	uint8_t status;
+};
+
 std::string MQServer::GetString(std::string name) {
 	return stringMap[name];
 }
@@ -35,12 +54,59 @@ void MQServer::Set(std::string name, int64_t value) {
 }
 
 void MQServer::PutString(std::string name, std::string value) {
+	zmq::socket_t a(*context,zmq::socket_type::req);
+	a.connect("inproc://mqserver");
+	packetHeader p;
+	p.dataType = 3; // string
+	p.datalen = value.size();
+	p.readHeader.type = 1; // put/write
+	p.readHeader.namelen = name.size();
+	zmq::message_t req(sizeof(packetHeader) + p.datalen + p.readHeader.namelen);
+	uint8_t* bytes = (uint8_t*)req.data();
+	memcpy(req.data(),&p,sizeof(p));
+	memcpy(&bytes[sizeof(p)],name.data(),p.readHeader.namelen);
+	memcpy(&bytes[sizeof(p)+p.readHeader.namelen],value.data(),p.datalen);
+	a.send(req);
+	a.disconnect("inproc://mqserver");
+	a.close();
 }
 
 void MQServer::PutDouble(std::string name, double value) {
+	zmq::socket_t a(*context,zmq::socket_type::req);
+	a.connect("inproc://mqserver");
+	packetHeader p;
+	p.dataType = 2; // double
+	p.datalen = 8;
+	p.readHeader.type = 1; // put/write
+	p.readHeader.namelen = name.size();
+	zmq::message_t req(sizeof(packetHeader) + p.datalen + p.readHeader.namelen);
+	uint8_t* bytes = (uint8_t*)req.data();
+	memcpy(req.data(),&p,sizeof(p));
+	memcpy(&bytes[sizeof(p)],name.data(),p.readHeader.namelen);
+	memcpy(&bytes[sizeof(p)+p.readHeader.namelen],&value,p.datalen);
+	printf("Name %s = %f", name.c_str(), value);
+	printf("Total Length: %d, actual %d", (sizeof(packetHeader) + p.datalen + p.readHeader.namelen), req.size());
+	a.send(req);
+	a.disconnect("inproc://mqserver");
+	a.close();
 }
 
 void MQServer::PutLong(std::string name, int64_t value) {
+	zmq::socket_t a(*context,zmq::socket_type::req);
+	a.connect("inproc://mqserver");
+	packetHeader p;
+	p.dataType = 1; // long
+	p.datalen = 8;
+	p.readHeader.type = 1; // put/write
+	p.readHeader.namelen = name.size();
+	zmq::message_t req(sizeof(packetHeader) + p.datalen + p.readHeader.namelen);
+	uint8_t* bytes = (uint8_t*)req.data();
+	memcpy(req.data(),&p,sizeof(p));
+	memcpy(&bytes[sizeof(p)],name.data(),p.readHeader.namelen);
+	memcpy(&bytes[sizeof(p)+p.readHeader.namelen],&value,p.datalen);
+	a.send(req);
+	a.disconnect("inproc://mqserver");
+	a.close();
 }
 
 // Format for mqserver messages
@@ -73,31 +139,12 @@ MQServer::MQServer() :
 // Set message specifies name and type and value
 // Set response returns status
 
-// Header of an input packet
-struct packetHeader {
-	struct {
-		uint8_t type;
-		uint16_t namelen;
-	} readHeader;
-	uint8_t dataType;
-	uint16_t datalen;
-};
-
-struct getResponseHeader {
-	uint8_t status;
-	uint8_t dataType;
-	uint16_t datalen;
-};
-
-struct setResponseHeader {
-	uint8_t status;
-};
-
 uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 	if (request.size() > sizeof(packetHeader)) {
 		packetHeader* p = (mqserver::packetHeader*) (request.data()); // Packet header is at start of data
 		uint8_t* bytes = (uint8_t*) (request.data()); // Lets us access data as a byte array
 		auto namelen = p->readHeader.namelen; // Grab the namelength from the packe header
+		printf("Packet type %d", p->readHeader.type);
 		switch (p->readHeader.type) { // switch over packet type
 		case 0: {
 			// Read
@@ -143,8 +190,8 @@ uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 		}
 		case 1: {
 			// Write
-			std::string name((char*) (&bytes[sizeof(p)]), namelen); // Name string starts after write header
-			auto dataOffset = sizeof(p) + namelen; // Data starts after header and name
+			std::string name((char*) (&bytes[sizeof(*p)]), namelen); // Name string starts after write header
+			auto dataOffset = sizeof(*p) + namelen; // Data starts after header and name
 			setResponseHeader h;
 			h.status = 0;
 			switch (p->dataType) {
@@ -159,7 +206,9 @@ uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 				break;
 			}
 			case 2: { // Double
-				double val = (double) bytes[dataOffset];
+				double val = *((double*)(&bytes[dataOffset]));
+				printf("Setting %s %d to %f\n", name.c_str(),name.length(), val);
+				printf("Total length %d, actual length %d\n", (sizeof(*p) + p->datalen + p->readHeader.namelen),request.size());
 				Set(name, val);
 				reply.rebuild(&h,sizeof(h));
 				break;
@@ -191,10 +240,12 @@ void MQServer::Run() {
 	sock->bind("tcp://*:5810");
 	sock->bind("inproc://mqserver"); //bind locally
 	while (running) {
-		zmq::message_t request, reply;
-
+		zmq::message_t request(200), reply;
 		sock->recv(&request);
+		printf("Received packet\n");
+		printf("More? %d",request.more());
 		auto error = parsePacket(request, reply);
+		printf("Processed packet with error %d\n", error);
 		if (error != 0) {
 			reply.rebuild(2); // 2 byte error response, type=255, second byte is error code
 			((uint8_t*) reply.data())[0] = 255;
@@ -203,7 +254,6 @@ void MQServer::Run() {
 		sock->send(reply);
 	}
 	sock->close();
-	context->close();
 }
 
 } /* namespace mqserver */

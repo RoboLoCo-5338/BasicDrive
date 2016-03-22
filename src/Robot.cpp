@@ -1,6 +1,7 @@
 #include "WPILib.h"
 #include "AHRS.h"
 #include <memory> //if you're reading this, it's too late
+#include "mqserver/MQServer.h"
 
 using std::shared_ptr;
 
@@ -47,6 +48,9 @@ private:
 
 	// NavX PID controller that works with the gyroscope
 	PIDController *turnController;
+
+	// ZeroMQ key-value server
+	mqserver::MQServer mqServer{};
 
 public:
 
@@ -543,6 +547,9 @@ private:
 		SmartDashboard::PutNumber("Right Drive 2", pdp->GetCurrent(15) + r);
 		SmartDashboard::PutNumber("Rotate Rate", rotateRate + r);
 		i = (i + 1) % 2;
+		mqServer.PutDouble("test",DriverStation::GetInstance().GetMatchTime());
+		SmartDashboard::PutNumber("test1", mqServer.GetDouble("test"));
+		SmartDashboard::PutNumber("test2", DriverStation::GetInstance().GetMatchTime());
 	}
 
 	void TestPeriodic() override {
