@@ -1,7 +1,6 @@
 #include "WPILib.h"
 #include "AHRS.h"
-#include <memory>
-#include "zmq.hpp"
+#include <memory> //if you're reading this, it's too late
 
 using std::shared_ptr;
 
@@ -271,7 +270,9 @@ private:
 			break;
 		case 3:
 			drive->TankDrive(autoSpeed, autoSpeed);
+			intakeLever->Set(-0.1);
 			if (timer->Get() >= autoLength) {
+				intakeLever->Set(0.0);
 				drive->TankDrive(0.0, 0.0);
 				currentState = 4;
 				timer->Reset();
@@ -503,6 +504,8 @@ private:
 		} else if (controlstick->GetRawButton(12)){
 			lift->Set(false);
 			liftdown->Set(true);
+		} else if (controlstick->GetRawButton(7)) {
+			liftdown->Set(false);
 		}
 		if (controlstick->GetRawButton(9)) {
 			winch->Set(scaleIntake);

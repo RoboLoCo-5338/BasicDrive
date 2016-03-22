@@ -13,7 +13,6 @@
 #include <memory>
 #include <string>
 #include <map>
-#include "MQObject.h"
 
 namespace mqserver {
 
@@ -22,14 +21,20 @@ class MQServer {
 	std::shared_ptr<zmq::context_t> context;
 	std::shared_ptr<zmq::socket_t> sock;
 	std::thread serverThread;
-	std::map<std::string, MQObject> map;
+	std::map<std::string, std::string> stringMap{};
+	std::map<std::string, double> doubleMap{};
+	std::map<std::string, long> longMap{};
 
 	bool running = true;
 
 	void Run();
-	void Set(std::string key, MQObject&);
-	MQObject* Get(std::string);
 public:
+	std::string GetString(std::string name);
+	double GetDouble(std::string name);
+	long GetLong(std::string name);
+	void Set(std::string name, std::string value);
+	void Set(std::string name, double value);
+	void Set(std::string name, long value);
 	MQServer();
 	virtual ~MQServer() = default;
 };
