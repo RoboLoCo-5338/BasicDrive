@@ -6,7 +6,8 @@
  */
 
 #include <mqserver/MQServer.h>
-
+#include "unistd.h"
+#include <sstream>
 namespace mqserver {
 
 struct packetHeader {
@@ -101,19 +102,19 @@ void MQServer::PutLong(std::string name, int64_t value) {
 	p.readHeader.namelen = name.size();
 	zmq::message_t req(sizeof(packetHeader) + p.datalen + p.readHeader.namelen);
 	uint8_t* bytes = (uint8_t*)req.data();
-	printf("1\n");
+//	printf("1\n");
 	memcpy(req.data(),&p,sizeof(p));
-	printf("2\n");
+//	printf("2\n");
 	memcpy(&bytes[sizeof(p)],name.data(),p.readHeader.namelen);
-	printf("3\n");
+//	printf("3\n");
 	memcpy(&bytes[sizeof(p)+p.readHeader.namelen],&value,p.datalen);
-	printf("4\n");
+//	printf("4\n");
 	a.send(req);
-	printf("5\n");
+//	printf("5\n");
 	a.disconnect("inproc://mqserver");
-	printf("6\n");
+//	printf("6\n");
 	a.close();
-	printf("7\n");
+//	printf("7\n");
 }
 
 // Format for mqserver messages
@@ -148,18 +149,21 @@ MQServer::MQServer() :
 
 uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 	if (request.size() > sizeof(packetHeader)) {
-		packetHeader* p = (mqserver::packetHeader*) (request.data()); // Packet header is at start of data
-		uint8_t* bytes = (uint8_t*) (request.data()); // Lets us access data as a byte array
-		auto namelen = p->readHeader.namelen; // Grab the namelength from the packe header
-		printf("Packet type %d", p->readHeader.type);
-		switch (p->readHeader.type) { // switch over packet type
+		//packetHeader* p = (mqserver::packetHeader*) (request.data()); // Packet header is at start of data
+		std::stringstream packetIn(std::string((char*)request.data(),request.size()),std::ios_base::in);
+		packetHeader p;
+		packetIn.read((char*)&p,sizeof(p.readHeader));
+		auto namelen = p.readHeader.namelen; // Grab the namelength from the packe header
+		printf("Packet type %d\n", p.readHeader.type);
+		switch (p.readHeader.type) { // switch over packet type
 		case 0: {
 			// Read
-			std::string name((char*) (&bytes[sizeof(p->readHeader)]), namelen); // Name string starts after read header
+			std::string name(namelen,'\0');
+			packetIn.read((char*)name.data(),namelen); // read name from packet
 			getResponseHeader r;
 			r.status = 0; // Nominal status is 0
-			r.dataType = p->readHeader.type; //
-			switch (p->readHeader.type) {
+			r.dataType = p.readHeader.type; //
+			switch (p.readHeader.type) {
 			case 0: // Null
 				return 2;
 				break;
@@ -196,29 +200,30 @@ uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 			break;
 		}
 		case 1: {
-			auto totalLen = sizeof(*p) + p->readHeader.namelen + p->datalen;
-			printf("Namelen: %d Datalen: %d Header len: %d Packet Length: %d", p->readHeader.namelen, p->datalen, sizeof(*p), request.size());
+			packetIn.read(&((char*)&p)[sizeof(p.readHeader)],sizeof(p)-sizeof(p.readHeader)); // read the rest of the packet
+			auto totalLen = sizeof(p) + p.readHeader.namelen + p.datalen;
+			printf("Namelen: %d Datalen: %d Header len: %d Packet Length: %d\n", p.readHeader.namelen, p.datalen, sizeof(p), request.size());
 			if (totalLen != request.size()) {
 				printf("Non matching length Expected: %d, recieved %d", totalLen, request.size());
 				return 4;
 			}
 			// Write
-			std::string name((char*) (&bytes[sizeof(*p)]), namelen); // Name string starts after write header
-			auto dataOffset = sizeof(*p) + namelen; // Data starts after header and name
+			std::string name(namelen,'\0');
+			packetIn.read((char*)name.data(),namelen);
 			setResponseHeader h;
 			h.status = 0;
-			switch (p->dataType) {
+			switch (p.dataType) {
 			case 0: { // Null
 				return 2;
 				break;
 			}
 			case 1: { // Long
 				printf("1.1\n");
-				printf("Data offset %d\n", dataOffset);
-				for (int i = 0; i < (dataOffset+8); i++) {
-					printf("%x",bytes[i]);
-				}
-				int64_t val = ((int64_t*)(bytes + dataOffset))[0];
+				// BAD CODE v
+				//int64_t val = ((int64_t*)(bytes + dataOffset))[0];
+				// BAD CODE ^
+				int64_t val;
+				packetIn.read((char*)&val,sizeof(val));
 				printf("1.2\n");
 				Set(name, val);
 				printf("1.3\n");
@@ -226,15 +231,17 @@ uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 				break;
 			}
 			case 2: { // Double
-				double val = *((double*)(&bytes[dataOffset]));
+				double val;
+				packetIn.read((char*)&val,sizeof(val));
 				printf("Setting %s %d to %f\n", name.c_str(),name.length(), val);
-				printf("Total length %d, actual length %d\n", (sizeof(*p) + p->datalen + p->readHeader.namelen),request.size());
+				printf("Total length %d, actual length %d\n", (sizeof(p) + p.datalen + p.readHeader.namelen),request.size());
 				Set(name, val);
 				reply.rebuild(&h,sizeof(h));
 				break;
 			}
 			case 3: { // String
-				std::string val((char*) &bytes[dataOffset]);
+				std::string val(p.datalen,'\0');
+				packetIn.read((char*)val.data(),val.length());
 				Set(name, val);
 				reply.rebuild(&h,sizeof(h));
 				break;
