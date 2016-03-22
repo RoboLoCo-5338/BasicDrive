@@ -547,8 +547,16 @@ private:
 		SmartDashboard::PutNumber("Right Drive 2", pdp->GetCurrent(15) + r);
 		SmartDashboard::PutNumber("Rotate Rate", rotateRate + r);
 		i = (i + 1) % 2;
+		printf("2.1");
+		mqServer.PutLong("test1.2", 1337);
+		printf("2.2");
 		mqServer.PutDouble("test",DriverStation::GetInstance().GetMatchTime());
+		printf("2.3");
+		mqServer.PutString("test1.1","YOLO_SWAGINS");
+		printf("2.4");
+		SmartDashboard::PutString("test1.2", mqServer.GetString("test1.1"));
 		SmartDashboard::PutNumber("test1", mqServer.GetDouble("test"));
+		SmartDashboard::PutNumber("test1.3", mqServer.GetLong("test1.2"));
 		SmartDashboard::PutNumber("test2", DriverStation::GetInstance().GetMatchTime());
 	}
 

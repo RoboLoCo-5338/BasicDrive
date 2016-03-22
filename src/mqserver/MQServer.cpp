@@ -101,12 +101,19 @@ void MQServer::PutLong(std::string name, int64_t value) {
 	p.readHeader.namelen = name.size();
 	zmq::message_t req(sizeof(packetHeader) + p.datalen + p.readHeader.namelen);
 	uint8_t* bytes = (uint8_t*)req.data();
+	printf("1\n");
 	memcpy(req.data(),&p,sizeof(p));
+	printf("2\n");
 	memcpy(&bytes[sizeof(p)],name.data(),p.readHeader.namelen);
+	printf("3\n");
 	memcpy(&bytes[sizeof(p)+p.readHeader.namelen],&value,p.datalen);
+	printf("4\n");
 	a.send(req);
+	printf("5\n");
 	a.disconnect("inproc://mqserver");
+	printf("6\n");
 	a.close();
+	printf("7\n");
 }
 
 // Format for mqserver messages
@@ -189,6 +196,12 @@ uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 			break;
 		}
 		case 1: {
+			auto totalLen = sizeof(*p) + p->readHeader.namelen + p->datalen;
+			printf("Namelen: %d Datalen: %d Header len: %d Packet Length: %d", p->readHeader.namelen, p->datalen, sizeof(*p), request.size());
+			if (totalLen != request.size()) {
+				printf("Non matching length Expected: %d, recieved %d", totalLen, request.size());
+				return 4;
+			}
 			// Write
 			std::string name((char*) (&bytes[sizeof(*p)]), namelen); // Name string starts after write header
 			auto dataOffset = sizeof(*p) + namelen; // Data starts after header and name
@@ -200,8 +213,15 @@ uint8_t MQServer::parsePacket(zmq::message_t& request, zmq::message_t& reply) {
 				break;
 			}
 			case 1: { // Long
-				int64_t val = (int64_t) bytes[dataOffset];
+				printf("1.1\n");
+				printf("Data offset %d\n", dataOffset);
+				for (int i = 0; i < (dataOffset+8); i++) {
+					printf("%x",bytes[i]);
+				}
+				int64_t val = ((int64_t*)(bytes + dataOffset))[0];
+				printf("1.2\n");
 				Set(name, val);
+				printf("1.3\n");
 				reply.rebuild(&h,sizeof(h));
 				break;
 			}
@@ -244,12 +264,19 @@ void MQServer::Run() {
 		sock->recv(&request);
 		printf("Received packet\n");
 		printf("More? %d",request.more());
+		try {
 		auto error = parsePacket(request, reply);
 		printf("Processed packet with error %d\n", error);
 		if (error != 0) {
 			reply.rebuild(2); // 2 byte error response, type=255, second byte is error code
 			((uint8_t*) reply.data())[0] = 255;
 			((uint8_t*) reply.data())[1] = error;
+		}
+		} catch (std::exception ex) {
+			printf("CAUGHT EXCEPTION: %s" ,ex.what());
+			reply.rebuild(2); // 2 byte error response, type=255, second byte is error code
+			((uint8_t*) reply.data())[0] = 255;
+			((uint8_t*) reply.data())[1] = 255;
 		}
 		sock->send(reply);
 	}
