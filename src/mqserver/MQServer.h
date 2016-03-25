@@ -32,7 +32,7 @@ class MQServer {
 	void Set(std::string name, std::string value);
 	void Set(std::string name, double value);
 	void Set(std::string name, int64_t value);
-
+	void SendStop();
 public:
 	std::string GetString(std::string name);
 	double GetDouble(std::string name);
@@ -40,6 +40,8 @@ public:
 	void PutString(std::string name, std::string value);
 	void PutDouble(std::string name, double value);
 	void PutLong(std::string name, int64_t value);
+	void Start();
+	void Stop();
 	MQServer();
 	virtual ~MQServer() = default;
 };
