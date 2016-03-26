@@ -445,6 +445,7 @@ private:
 
 	float constantLift = 0;
 	bool bounce = false;
+	int aimState = 0;
 
 	void TeleopPeriodic() override {
 		float leftPower, rightPower; // Get the values for the main drive train joystick controllers
@@ -461,23 +462,47 @@ private:
 
 		// wtf is a setpoint
 		if (leftjoystick->GetRawButton(6)) {
-			turnController->SetSetpoint(0);
 			turnController->Reset();
+			turnController->SetSetpoint(0);
 			turnController->Enable();
 			ahrs->ZeroYaw();
 			//ahrs->Reset();
 		}
 
-		//Drive straight with one controller, else: drive with two controllers
-		if (leftjoystick->GetRawButton(1)) {
-			drive->TankDrive(leftPower * multiplier, leftPower * multiplier,
-					false);
-		} else if (leftjoystick->GetRawButton(2)) {
-			drive->TankDrive(leftPower * multiplier + rotateRate,
-					leftPower * multiplier + -rotateRate, false);
-		} else {
-			drive->TankDrive(leftPower * multiplier, rightPower * multiplier,
-					false);
+		// Press button to auto calculate angle to rotate bot to nearest ball
+		if(leftjoystick->GetRawButton(99))
+		{
+			ahrs->ZeroYaw();
+			turnController->Reset();
+			turnController->SetSetpoint(mqServer.GetDouble("angle"));
+			turnController->Enable();
+			aimState = 1;
+		}
+
+		switch(aimState)
+		{
+		default:
+		case 0: // No camera assisted turning
+			//Drive straight with one controller, else: drive with two controllers
+			if (leftjoystick->GetRawButton(1)) {
+				drive->TankDrive(leftPower * multiplier, leftPower * multiplier,
+						false);
+			} else if (leftjoystick->GetRawButton(2)) {
+				drive->TankDrive(leftPower * multiplier + rotateRate,
+						leftPower * multiplier + -rotateRate, false);
+			} else {
+				drive->TankDrive(leftPower * multiplier, rightPower * multiplier,
+						false);
+			}
+			break;
+		case 1: // Camera assisted turning, deny input from controllers
+			drive->TankDrive(rotateRate, -rotateRate, false);
+			if(turnController->OnTarget() || leftjoystick->GetRawButton(97)) {
+				aimState = 0; // Finished turning, auto assist off
+				turnController->Disable();
+				turnController->Reset();
+			}
+			break;
 		}
 
 		// That little flap at the bottom of the joystick
