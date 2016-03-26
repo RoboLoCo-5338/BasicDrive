@@ -442,6 +442,10 @@ private:
 	}
 
 	// The actual stuff
+
+	float constantLift = 0;
+	bool bounce = false;
+
 	void TeleopPeriodic() override {
 		float leftPower, rightPower; // Get the values for the main drive train joystick controllers
 		leftPower = -leftjoystick->GetY();
@@ -479,10 +483,10 @@ private:
 		// That little flap at the bottom of the joystick
 		float scaleIntake = (1 - (controlstick->GetThrottle() + 1) / 2);
 		// Depending on the button, our intake will eat or shoot the ball
-		if (controlstick->GetRawButton(1)) {
+		if (controlstick->GetRawButton(2)) {
 			intake->Set(-scaleIntake);
 			shooter->Set(scaleIntake);
-		} else if (controlstick->GetRawButton(2)) {
+		} else if (controlstick->GetRawButton(1)) {
 			intake->Set(scaleIntake);
 			shooter->Set(-scaleIntake);
 		} else {
@@ -492,15 +496,15 @@ private:
 
 		// Control the motor that lifts and descends the intake bar
 		if (controlstick->GetRawButton(4)) {
-			intakeLever->Set(.25);
+			intakeLever->Set(.30); // open
 		} else if (controlstick->GetRawButton(6)) {
-			intakeLever->Set(-.25);
+			intakeLever->Set(-.40); // close
 		} else if (controlstick->GetRawButton(5)){
 			intakeLever->Set(-scaleIntake);
 		} else if (controlstick->GetRawButton(3)) {
 			intakeLever->Set(scaleIntake);
 		} else {
-			intakeLever->Set(0);
+			intakeLever->Set(constantLift);
 		}
 		if (controlstick->GetRawButton(11)) {
 			lift->Set(true);
@@ -517,6 +521,18 @@ private:
 			winch->Set(-scaleIntake);
 		} else {
 			winch->Set(0);
+		}
+		if (controlstick->GetPOV() == 0 && !bounce ) {
+			constantLift -= 0.05;
+			bounce = true;
+		} else if (controlstick->GetPOV() == 180 && !bounce) {
+			constantLift += 0.05;
+			bounce = true;
+		} else if (controlstick->GetPOV() == 270 && !bounce) {
+			constantLift = 0;
+			bounce = true;
+		} else {
+			bounce = false;
 		}
 		UpdateDashboard();
 	}
@@ -545,6 +561,7 @@ private:
 		SmartDashboard::PutNumber("Left Drive 2", pdp->GetCurrent(13) + r);
 		SmartDashboard::PutNumber("Right Drive 1", pdp->GetCurrent(14) + r);
 		SmartDashboard::PutNumber("Right Drive 2", pdp->GetCurrent(15) + r);
+		SmartDashboard::PutNumber("Constant Lift", constantLift);
 		SmartDashboard::PutNumber("Rotate Rate", rotateRate + r);
 		i = (i + 1) % 2;
 		printf("2.1");
