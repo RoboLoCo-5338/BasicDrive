@@ -409,36 +409,57 @@ private:
 	void AutonomousLowBar() {
 //		Strategy 2 - start in a normal position lined up with low bar, go through low bars and score boulder in lower goal.
 //		-------------------------------------------------------------------------------------------------------------------
-//		-State: Stopped
-//		--transition: state Drive Forward
-//		-State: Driving Forowbar, and in position with tower
-//		--transition: turn right
-//		-State: Turning Right
-//		--wait until 58.25 degrees
-//		--transition: Drive Forward
-//		-State: Driving Forward
-//		--wait until lined up with tower low goal
-//		--transition: Stopped
-//		-State: Stopped
-//		--transition: State Shooting
-//		-State: Shooting
-//		--wait until shooting complete
-//		--transition State backing up
-//		-State: Backing Up
-//		--wait until backed up to be in line with low background
-//		--transition: State turn
-//		-State: Turning Left
-//		--wait until 58.25 degrees (same as last turn)
-//		--transition: Backing Up
-//		-State: Backing Up
-//		--wait until backed through lower goal
-//		--transition: stopped
-//		-State: Stopped
+// 		backUp straight for a little bit
+//      drop arm
+//   	backup more under lowbar
+//      stop (we might add going to lowgoal later)
+		switch(currentState)
+		{
+		case 1:
+			timer->Reset();
+			timer->Start();
+			currentState = 2;
+			break;
+		case 2:
+			drive->TankDrive(autoSpeed,autoSpeed);
+			if(timer->Get() >= .4)
+			{
+				drive->TankDrive(0.0,0.0);
+				currentState = 3;
+				timer->Reset();
+				timer->Start();
+			}
+			break;
+		case 3:
+			intakeLever->Set(autoIntakeSpeed);
+			if(timer->Get() >= .5)
+			{
+				intakeLever->Set(0.0);
+				currentState = 4;
+				timer->Reset();
+				timer->Start();
+			}
+			break;
+		case 4:
+			drive->TankDrive(autoSpeed,autoSpeed);
+			if(timer->Get() >= autoLength)
+			{
+				drive->TankDrive(0.0,0.0);
+				currentState = 5;
+				timer->Reset();
+				timer->Stop();
+			}
+			break;
+		}
 	}
 	void TeleopInit() override {
 		drive->SetExpiration(200000);
 		drive->SetSafetyEnabled(false);
 		liftdown->Set(false);
+
+		intake_hold = false;
+		lastLiftPos = 0;
+		manual = true;
 	}
 
 	// The actual stuff
@@ -446,6 +467,10 @@ private:
 	float constantLift = 0;
 	bool bounce = false;
 	int aimState = 0;
+
+	bool intake_hold = false;
+	int lastLiftPos = 0;
+	bool manual = true;
 
 	void TeleopPeriodic() override {
 		float leftPower, rightPower; // Get the values for the main drive train joystick controllers
@@ -460,7 +485,7 @@ private:
 			multiplier = 0.5;
 		}
 
-		// wtf is a setpoint
+		// wtf is a setpoint - it's an angle to turn to
 		if (leftjoystick->GetRawButton(6)) {
 			turnController->Reset();
 			turnController->SetSetpoint(0);
@@ -470,14 +495,14 @@ private:
 		}
 
 		// Press button to auto calculate angle to rotate bot to nearest ball
-		if(leftjoystick->GetRawButton(99))
-		{
-			ahrs->ZeroYaw();
-			turnController->Reset();
-			turnController->SetSetpoint(mqServer.GetDouble("angle"));
-			turnController->Enable();
-			aimState = 1;
-		}
+//		if(leftjoystick->GetRawButton(99))
+//		{
+//			ahrs->ZeroYaw();
+//			turnController->Reset();
+//			turnController->SetSetpoint(mqServer.GetDouble("angle"));
+//			turnController->Enable();
+//			aimState = 1;
+//		}
 
 		switch(aimState)
 		{
@@ -520,16 +545,39 @@ private:
 		}
 
 		// Control the motor that lifts and descends the intake bar
-		if (controlstick->GetRawButton(4)) {
-			intakeLever->Set(.30); // open
-		} else if (controlstick->GetRawButton(6)) {
-			intakeLever->Set(-.40); // close
-		} else if (controlstick->GetRawButton(5)){
-			intakeLever->Set(-scaleIntake);
-		} else if (controlstick->GetRawButton(3)) {
-			intakeLever->Set(scaleIntake);
+		float intake_lever_power = 0;
+		if (controlstick->GetRawButton(6)) {
+			manual = true;
+			intake_lever_power = .3;
+//			intakeLever->Set(.30); // close
+		} else if (controlstick->GetRawButton(4)) {
+			manual = true;
+			intake_lever_power = -.4;
+//			intakeLever->Set(-.40); // open
+		} else if (controlstick->GetRawButton(3)){
+			manual = true;
+			intake_lever_power = -scaleIntake;
+//			intakeLever->Set(-scaleIntake);
+		} else if (controlstick->GetRawButton(5)) {
+			manual = true;
+			intake_lever_power = scaleIntake;
+//			intakeLever->Set(scaleIntake);
 		} else {
-			intakeLever->Set(constantLift);
+			if (manual) {
+				manual = false;
+				lastLiftPos = intakeLever->GetEncPosition();
+				intakeLever->SetControlMode(CANTalon::ControlMode::kPosition);
+				intakeLever->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
+				intakeLever->SetPID(1, 0.001, 0.0);
+				intakeLever->EnableControl();
+			}
+			intake_hold = true;
+			intakeLever->Set(lastLiftPos);
+		}
+		if (manual) {
+			intake_hold = false;
+			intakeLever->SetControlMode(CANTalon::ControlMode::kPercentVbus);
+			intakeLever->Set(intake_lever_power);
 		}
 		if (controlstick->GetRawButton(11)) {
 			lift->Set(true);
